@@ -1,38 +1,43 @@
 var activeTab = null;
 var activeCollapse = null;
 var timeago = true;
+var autorefresh = true;
+var cache = {};
 
+window.matchMediaPhone = function () {
+	return matchMedia('(max-width: 767px)').matches;
+}
+window.matchMediaTablet = function () {
+	return matchMedia('(min-width: 768px) and (max-width: 979px)').matches;
+}
+window.matchMediaDesktop = function () {
+	return matchMedia('(min-width: 979px)').matches;
+}
 
 $.ajax({
-	type:"GET",
-	url:"/api/config/eventtimeago",
-	contentType:"application/json; charset=utf-8",
-	dataType:"json",
-	data:"{}",
-	success:function (res) {
+	type: "GET",
+	url: "/api/config/eventtimeago",
+	contentType: "application/json; charset=utf-8",
+	dataType: "json",
+	data: "{}",
+	success: function (res) {
 		timeago = res.eventtimeago.toLowerCase() == "true";
 	}
 });
 
 function createEvents(list) {
-	var source  = $("#events-template").html();
+	var source = $("#events-template").html();
 	var template = Handlebars.compile(source);
 
 	list.reverse().forEach(function (ev, i) {
-		if (timeago) {
-			ev.tooltip = ev.datetime;
-			ev.time = jQuery.timeago(ev.datetime);
-		} else {
-			ev.tooltip = jQuery.timeago(ev.datetime);
-			ev.time = ev.datetime;
-		}
+		ev.time = moment(ev.datetime).calendar();
 	});
 
-	return template({events: list});
+	return template({events: list, timeago: timeago});
 }
 
 function details(obj, templateId) {
-	var source  = $(templateId).html();
+	var source = $(templateId).html();
 	var template = Handlebars.compile(source);
 
 	var zones = [];
@@ -43,6 +48,10 @@ function details(obj, templateId) {
 			zone.class = zone.status.open ? 'badge-important' : 'badge-success';
 			zone.icon = !zone.status.open ? 'icon-ok-sign' : 'icon-minus-sign';
 			zone.events = createEvents(zone.lastevents);
+			zone.selected = "";
+			if (activeCollapse == "collapseZone" + i) {
+				zone.selected = "in";
+			}
 			zones.push(zone);
 		}
 	}
@@ -55,95 +64,77 @@ function details(obj, templateId) {
 			partition.class = partition.status.ready ? 'badge-success' : 'badge-important';
 			partition.icon = partition.status.ready ? 'icon-ok-sign' : 'icon-minus-sign';
 			partition.events = createEvents(partition.lastevents);
+			partition.selected = "";
+			if (activeCollapse == "collapsePart" + i) {
+				partition.selected = "in";
+			}
 			partitions.push(partition);
 		}
 	}
 
-	return template({zones: zones, zoneAllEvents: createEvents(obj.zone.lastevents), partitions: partitions, partitionAllEvents: createEvents(obj.partition.lastevents)});
+	return template({zones: zones,
+		zoneAllEvents: createEvents(obj.zone.lastevents),
+		partitions: partitions,
+		partitionAllEvents: createEvents(obj.partition.lastevents),
+		zoneAllSelected: activeCollapse == "collapseZoneAll" ? "in" : "",
+		partitionAllSelected: activeCollapse == "collapsePartAll" ? "in" : "",
+	});
 }
 
 function actions(obj) {
-	var str = '';
-	var armed = obj.partition["1"].status.armed;
-	var exit = obj.partition["1"].status.exit_delay;
-	var pgm_output = obj.partition["1"].status.pgm_output;
+	var source = $("#actions-template").html();
+	var template = Handlebars.compile(source);
 
-	if (armed) {
-		str += '<a class="btn" href="#" onclick="disarm();return false;">Disarm</a>';
-	} else if (pgm_output) {
-		/* Dont show any button, you can't cancel a PGM output */
-		str += '';
-        } else if (!exit) {
-                /* Quick arm is default now with new drop down to select Arm with code */
-                str += '<div class="btn-group">';
-                str += '<button class="btn"><a href="#" onclick="doAction(\'arm\');return false;">Quick Arm</a></button>';
-                str += '<button class="btn dropdown-toggle" data-toggle="dropdown">';
-                str += '<span class="caret"></span></button><ul class="dropdown-menu">';
-		str += '<li><a href="#" onclick="armwithcode();return false;">Arm W/Code</a></li>';
-                str += '</ul></div>';
-                /* Now back to regular buttons here */
-		str += '<a class="btn" href="#" onclick="doAction(\'stayarm\');return false;">Stay</a> ';
-		str += '<a class="btn" href="#" onclick="pgm();return false;">PGM</a> ';
-	}
-	if (exit) {
-		str += '<a class="btn-small" href="#" onclick="disarm();return false;">Cancel</a>';
-	}
-
-	return str;
+	return template({armed: obj.partition["1"].status.armed,
+		exit: obj.partition["1"].status.exit_delay,
+		pgm_output: obj.partition["1"].status.pgm_output
+	});
 }
 
 function disarm() {
-	var code = prompt("What is your code?", "");
-	$.ajax({
-		type:"GET",
-		url:"/api/alarm/disarm?alarmcode=" + code,
-		contentType:"application/json; charset=utf-8",
-		dataType:"json",
-		data:"{}",
-		success:function (res) {
-			$.scojs_message(res.response, $.scojs_message.TYPE_OK);
+	alertify.prompt("What is your code?", function (e, code) {
+		if (e) {
+			doAction("/api/alarm/disarm?alarmcode=" + code);
 		}
 	});
 }
 
 function pgm() {
-	var pgmnum= prompt("Enter PGM # to trigger", "");
-	var code= prompt("What is your code?", "");
-	$.ajax({
-		type:"GET",
-		url:"/api/pgm?pgmnum=" + pgmnum + "&alarmcode=" + code,
-		contentType:"application/json; charset=utf-8",
-		dataType:"json",
-		data:"{}",
-		success:function (res) {
-			$.scojs_message(res.response, $.scojs_message.TYPE_OK);
-		}
+	alertify.prompt("Enter PGM # to trigger", function (e, pgmnum) {
+		if (e) {
+			alertify.prompt("What is your code?", function (e1, code) {
+				if (e1) {
+					doAction("/api/pgm?pgmnum=" + pgmnum + "&alarmcode=" + code);
+			 	}
+			});
+	    }
 	});
 }
 
 function armwithcode() {
-	var code = prompt("What is your code?", "");
-	$.ajax({
-		type:"GET",
-		url:"/api/alarm/armwithcode?alarmcode=" + code,
-		contentType:"application/json; charset=utf-8",
-		dataType:"json",
-		data:"{}",
-		success:function (res) {
-			$.scojs_message(res.response, $.scojs_message.TYPE_OK);
-		}
+	alertify.prompt("What is your code?", function (e, code) {
+		if (e) {
+			console.log(code);
+			doAction("/api/alarm/armwithcode?alarmcode=" + code);
+	    } else {
+	    	alertify.error("not armed")
+	    }
 	});
 }
 
 function doAction(action) {
+	console.log(action);
 	$.ajax({
-		type:"GET",
-		url:"/api/alarm/" + action,
-		contentType:"application/json; charset=utf-8",
-		dataType:"json",
-		data:"{}",
-		success:function (res) {
-			$.scojs_message(res.response, $.scojs_message.TYPE_OK);
+		type: "GET",
+		url: action,
+		contentType: "application/json; charset=utf-8",
+		dataType: "json",
+		success: function (res) {
+			console.log(res.response);
+			alertify.success(res.response);
+		},
+		error: function () {
+			alertify.error("error performing action");
 		}
 	});
 }
@@ -177,36 +168,51 @@ function message(obj) {
 	$('#message').html(str).fadeIn();
 }
 
-function refresh() {
+function update(id, value, force) {
+	var old = cache[id];
+	if (old != value || force) {
+		$(id).html(value).fadeIn();
+		cache[id] = value;
+		return true;
+	}
+	return false;
+}
+
+function refresh(force) {
 	$.ajax({
-		type:"GET",
-		url:"/api",
-		contentType:"application/json; charset=utf-8",
-		dataType:"json",
-		data:"{}",
-		success:function (res) {
-			$('#details').html(details(res, "#template")).fadeIn();
-			$('#mobile-details').html(details(res, "#mobile-template")).fadeIn();
-			$('#actions').html(actions(res)).fadeIn();
+		type: "GET",
+		url: "/api",
+		contentType: "application/json; charset=utf-8",
+		dataType: "json",
+		data: "{}",
+		success: function (res) {
+			if (matchMediaPhone()) {
+				update('#mobile-details', details(res, "#mobile-template"), force);
+			} else {
+				if (update('#details', details(res, "#template")), force) {
+					if (activeTab) {
+						$('#tabs a[href="' + activeTab + '"]').tab('show');
+					}
+				}
+			}
+			update('#actions', actions(res), force);
 			$('#tabs').tab();
 
 			$('#tabs a[data-toggle="tab"]').on('shown', function (e) {
 				activeTab = e.target.hash;
 			});
-			if (activeTab) {
-				$('#tabs a[href="' + activeTab + '"]').tab('show');
+			$('.accordion-body').on('show',function () {
+				activeCollapse = this.id;
+			}).on('hide', function () {
+					activeCollapse = null;
+				});
+
+			if (autorefresh) {
+				$("#autorefresh").addClass('active');
 			}
 
-			$("[rel=tooltip]").tooltip();
-
-			$('.accordion-body').on('shown', function() {
-				activeCollapse = this.id;
-				console.log(activeCollapse);
-			}).on('hidden', function() {
-				activeCollapse = null;
-			});
-			if (activeCollapse) {
-				$('#accordion2 #' + activeCollapse).collapse('show');
+			if (timeago) {
+				$("#timeago").addClass('active');
 			}
 
 			message(res);
@@ -216,9 +222,12 @@ function refresh() {
 
 $(document).ready(function () {
 	refresh();
+	FastClick.attach(document.body);
 });
 
 
 setInterval(function () {
-	refresh();
+	if (autorefresh) {
+		refresh(false);
+	}
 }, 5000);
