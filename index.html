@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>Alarm Server</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link href="bootstrap.min.css" rel="stylesheet" media="screen">
+	<link href="scojs.css" rel="stylesheet" media="screen">
+	<style type="text/css">
+		body {
+			padding-top: 20px;
+			padding-bottom: 40px;
+		}
+
+		.container-narrow {
+			margin: 0 auto;
+			max-width: 900px;
+		}
+
+		.container-narrow > hr {
+			margin: 30px 0;
+		}
+
+	</style>
+</head>
+<body>
+<script src="jquery.js"></script>
+<script src="alarmserver.js"></script>
+<script src="bootstrap.min.js"></script>
+<script src="bootbox.min.js"></script>
+<script src="jquery.timeago.js"></script>
+<script src="sco.message.js"></script>
+<div class="container-narrow">
+	<div class="masthead">
+		<ul class="nav nav-pills pull-right">
+			<li class="active"><a href="#">Home</a></li>
+			<li><a href="/api">API/JSON</a></li>
+			<li><a href="https://github.com/juggie/AlarmServer">About</a></li>
+		</ul>
+		<h3 class="muted">Alarm Server</h3>
+	</div>
+	<hr>
+
+	<div class="container-fluid">
+		<div class="row-fluid">
+			<div class="row-fluid">
+				<div class="btn-toolbar">
+					<div id="actions">
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="row-fluid">
+			<div class="span12">
+				<div id="message"></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="container-fluid">
+		<div class="row-fluid">
+			<div class="span4">
+				<div id="tabcontainer"></div>
+			</div>
+			<div class="span8">
+				<div id="details" class="tab-content"></div>
+			</div>
+		</div>
+	</div>
+</div>
+</body>
+</html>
